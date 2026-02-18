@@ -1,18 +1,42 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Message } from "./client.js";
+import { type Workspace, initWorkspace } from "./workspace.js";
+import {
+  loadSession,
+  appendEntry,
+  clearSession,
+  type SessionEntry,
+} from "./session.js";
+import { readMemory, writeMemory, appendToDailyLog } from "./memory.js";
+import {
+  type ContextConfig,
+  checkContextStatus,
+  truncateMessages,
+} from "./context.js";
+import { type Config as AppConfig } from "./config.js";
+import { initSearch, indexAllMemory, search, closeSearch } from "./search.js";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Database = any;
 
 export interface GatewayConfig {
   port: number;
 }
 
 export interface ClientMessage {
-  type: "message" | "history" | "clear";
+  type:
+    | "message"
+    | "history"
+    | "clear"
+    | "readMemory"
+    | "writeMemory"
+    | "search";
   content?: string;
   sessionId?: string;
+  query?: string;
 }
 
 export interface ServerMessage {
-  type: "response" | "error" | "history";
+  type: "response" | "error" | "history" | "memory" | "searchResults";
   content: string;
   sessionId?: string;
   timestamp: number;
@@ -25,13 +49,33 @@ type MessageHandler = (
 
 export class Gateway {
   private wss: WebSocketServer;
-  private sessions: Map<string, Message[]> = new Map();
   private messageHandler: MessageHandler;
   private clients: Set<WebSocket> = new Set();
+  private workspace: Workspace;
+  private contextConfig: ContextConfig;
+  private systemPrompt: string;
+  private searchDb: Database;
 
-  constructor(config: GatewayConfig, messageHandler: MessageHandler) {
+  constructor(
+    config: GatewayConfig,
+    appConfig: AppConfig,
+    messageHandler: MessageHandler,
+  ) {
     this.wss = new WebSocketServer({ port: config.port });
     this.messageHandler = messageHandler;
+    this.workspace = initWorkspace(appConfig.workspace);
+    this.contextConfig = {
+      maxTokens: appConfig.contextWindow,
+      guardThreshold: appConfig.guardThreshold,
+    };
+    this.systemPrompt = appConfig.systemPrompt;
+    this.searchDb = initSearch(this.workspace);
+
+    console.log(`[Gateway] Workspace: ${this.workspace.root}`);
+    console.log(
+      `[Gateway] Context: ${this.contextConfig.maxTokens} tokens (${this.contextConfig.guardThreshold * 100}% threshold)`,
+    );
+
     this.setupServer();
   }
 
@@ -81,17 +125,58 @@ export class Gateway {
     switch (msg.type) {
       case "message": {
         if (!msg.content) {
-          this.send(ws, { type: "error", content: "No content", timestamp: Date.now() });
+          this.send(ws, {
+            type: "error",
+            content: "No content",
+            timestamp: Date.now(),
+          });
           return;
         }
 
-        const history = this.sessions.get(sessionId) || [];
+        const history = loadSession(this.workspace, sessionId);
         history.push({ role: "user", content: msg.content });
+
+        const status = checkContextStatus(
+          history,
+          this.systemPrompt,
+          this.contextConfig,
+        );
+        if (status.needsTruncation) {
+          const maxTokens = Math.floor(
+            this.contextConfig.maxTokens *
+              this.contextConfig.guardThreshold *
+              0.8,
+          );
+          const truncated = truncateMessages(history, maxTokens);
+          history.length = 0;
+          history.push(...truncated);
+          console.log(
+            `[Gateway] Truncated session ${sessionId} to ${truncated.length} messages (${status.currentTokens} -> ${truncated.length * 50} estimated)`,
+          );
+        }
 
         try {
           const response = await this.messageHandler(sessionId, history);
           history.push({ role: "assistant", content: response });
-          this.sessions.set(sessionId, history);
+
+          const entry: SessionEntry = {
+            role: "user",
+            content: msg.content,
+            timestamp: Date.now(),
+          };
+          appendEntry(this.workspace, sessionId, entry);
+
+          const responseEntry: SessionEntry = {
+            role: "assistant",
+            content: response,
+            timestamp: Date.now(),
+          };
+          appendEntry(this.workspace, sessionId, responseEntry);
+
+          appendToDailyLog(
+            this.workspace,
+            `User: ${msg.content}\nAssistant: ${response}`,
+          );
 
           this.send(ws, {
             type: "response",
@@ -110,7 +195,7 @@ export class Gateway {
       }
 
       case "history": {
-        const historyData = this.sessions.get(sessionId) || [];
+        const historyData = loadSession(this.workspace, sessionId);
         this.send(ws, {
           type: "history",
           content: JSON.stringify(historyData),
@@ -120,8 +205,8 @@ export class Gateway {
         break;
       }
 
-      case "clear":
-        this.sessions.delete(sessionId);
+      case "clear": {
+        clearSession(this.workspace, sessionId);
         this.send(ws, {
           type: "response",
           content: "Session cleared",
@@ -129,6 +214,63 @@ export class Gateway {
           timestamp: Date.now(),
         });
         break;
+      }
+
+      case "readMemory": {
+        const memory = readMemory(this.workspace);
+        this.send(ws, {
+          type: "memory",
+          content: memory,
+          timestamp: Date.now(),
+        });
+        break;
+      }
+
+      case "writeMemory": {
+        if (!msg.content) {
+          this.send(ws, {
+            type: "error",
+            content: "No content",
+            timestamp: Date.now(),
+          });
+          return;
+        }
+        try {
+          writeMemory(this.workspace, msg.content);
+          indexAllMemory(this.workspace, this.searchDb);
+          this.send(ws, {
+            type: "response",
+            content: "Memory updated",
+            timestamp: Date.now(),
+          });
+        } catch (err) {
+          this.send(ws, {
+            type: "error",
+            content:
+              err instanceof Error ? err.message : "Failed to write memory",
+            timestamp: Date.now(),
+          });
+        }
+        break;
+      }
+
+      case "search": {
+        if (!msg.query) {
+          this.send(ws, {
+            type: "error",
+            content: "No query",
+            timestamp: Date.now(),
+          });
+          return;
+        }
+        const results = search(this.searchDb, msg.query);
+        this.send(ws, {
+          type: "searchResults",
+          content: JSON.stringify(results),
+          timestamp: Date.now(),
+        });
+        break;
+      }
     }
   }
 
@@ -148,6 +290,7 @@ export class Gateway {
   }
 
   close(): void {
+    closeSearch(this.searchDb);
     this.wss.close();
   }
 }

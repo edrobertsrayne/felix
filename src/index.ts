@@ -2,24 +2,12 @@ import dotenv from "dotenv";
 import { Gateway } from "./gateway.js";
 import { LLMClient, type Message } from "./client.js";
 import { TUI } from "./tui.js";
+import { loadConfig, resolveConfig } from "./config.js";
 
 dotenv.config();
 
-interface Config {
-  gateway: {
-    port: number;
-  };
-  model: string;
-  systemPrompt: string;
-}
-
-const config: Config = {
-  gateway: {
-    port: 18789,
-  },
-  model: "openrouter/auto",
-  systemPrompt: "You are a helpful AI assistant. Keep responses concise.",
-};
+const rawConfig = loadConfig();
+const config = resolveConfig(rawConfig);
 
 const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -37,6 +25,7 @@ const llm = new LLMClient({
 
 const gateway = new Gateway(
   config.gateway,
+  config,
   async (sessionId: string, messages: Message[]) => {
     console.log(`[Gateway] Processing message for session: ${sessionId}`);
     const response = await llm.chat(messages);

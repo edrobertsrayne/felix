@@ -1,0 +1,10 @@
+{
+  "workspace": "./agent-workspace",
+  "contextWindow": 128000,
+  "guardThreshold": 0.8,
+  "gateway": {
+    "port": 18789
+  },
+  "model": "openrouter/auto",
+  "systemPrompt": "You are a helpful AI assistant. Keep responses concise."
+}
