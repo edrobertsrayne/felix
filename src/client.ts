@@ -31,11 +31,27 @@ export class LLMClient {
     ];
 
     const response = await this.client.chat.send({
-      model: this.model,
-      messages: fullMessages,
+      chatGenerationParams: {
+        model: this.model,
+        messages: fullMessages,
+      },
     });
 
-    return response.choices[0]?.message?.content || "";
+    const content = response.choices[0]?.message?.content;
+    if (typeof content === "string") {
+      return content;
+    }
+    if (Array.isArray(content) && content.length > 0) {
+      const firstItem = content[0];
+      if (
+        typeof firstItem === "object" &&
+        firstItem !== null &&
+        "text" in firstItem
+      ) {
+        return firstItem.text;
+      }
+    }
+    return "";
   }
 
   async *chatStream(messages: Message[]): AsyncGenerator<string> {
@@ -44,15 +60,13 @@ export class LLMClient {
       ...messages,
     ];
 
-    const response = await this.client.chat.send(
-      {
+    const response = await this.client.chat.send({
+      chatGenerationParams: {
         model: this.model,
         messages: fullMessages,
-      },
-      {
         stream: true,
       },
-    );
+    });
 
     for await (const chunk of response) {
       const content = chunk.choices[0]?.delta?.content;
