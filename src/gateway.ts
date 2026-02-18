@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Message } from "./client.js";
 import { type Workspace, initWorkspace } from "./workspace.js";
-import { loadSession, clearSession } from "./session.js";
+import { loadSession, clearSession, getSessionCount } from "./session.js";
 import { readMemory, writeMemory } from "./memory.js";
 import { type ContextConfig } from "./context.js";
 import { type Config as AppConfig } from "./config.js";
@@ -14,6 +14,17 @@ export interface GatewayConfig {
   port: number;
 }
 
+export interface GatewayStatus {
+  port: number;
+  clientCount: number;
+  sessionCount: number;
+  uptime: number;
+  workspace: string;
+  model: string;
+  contextWindow: number;
+  telegramEnabled: boolean;
+}
+
 export interface ClientMessage {
   type:
     | "message"
@@ -21,7 +32,8 @@ export interface ClientMessage {
     | "clear"
     | "readMemory"
     | "writeMemory"
-    | "search";
+    | "search"
+    | "status";
   content?: string;
   sessionId?: string;
   query?: string;
@@ -36,10 +48,12 @@ export interface ServerMessage {
     | "searchResults"
     | "stream_start"
     | "stream_chunk"
-    | "stream_end";
+    | "stream_end"
+    | "status";
   content: string;
   sessionId?: string;
   timestamp: number;
+  statusData?: GatewayStatus;
 }
 
 type MessageHandler = (
@@ -61,6 +75,9 @@ export class Gateway {
   private contextConfig: ContextConfig;
   private systemPrompt: string;
   private searchDb: Database;
+  private startTime: number;
+  private model: string;
+  private telegramEnabled: boolean;
 
   constructor(
     config: GatewayConfig,
@@ -78,6 +95,9 @@ export class Gateway {
     };
     this.systemPrompt = appConfig.systemPrompt;
     this.searchDb = initSearch(this.workspace);
+    this.startTime = Date.now();
+    this.model = appConfig.model;
+    this.telegramEnabled = appConfig.telegram.enabled;
 
     console.log(`[Gateway] Workspace: ${this.workspace.root}`);
     console.log(
@@ -280,6 +300,27 @@ export class Gateway {
           type: "searchResults",
           content: JSON.stringify(results),
           timestamp: Date.now(),
+        });
+        break;
+      }
+
+      case "status": {
+        const addr = this.wss.address();
+        const port = typeof addr === "object" ? (addr?.port ?? 0) : 0;
+        this.send(ws, {
+          type: "status",
+          content: "",
+          timestamp: Date.now(),
+          statusData: {
+            port,
+            clientCount: this.clients.size,
+            sessionCount: getSessionCount(this.workspace),
+            uptime: Date.now() - this.startTime,
+            workspace: this.workspace.root,
+            model: this.model,
+            contextWindow: this.contextConfig.maxTokens,
+            telegramEnabled: this.telegramEnabled,
+          },
         });
         break;
       }
