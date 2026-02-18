@@ -27,21 +27,13 @@
   # https://devenv.sh/git-hooks/
   # Use Bun-based linting and formatting (not Python prek)
   git-hooks.hooks = {
-    prettier = {
+    pre-commit = {
       enable = true;
-      name = "prettier";
-      entry = "${pkgs.bun}/bin/bun run prettier --check";
+      name = "pre-commit";
+      entry = "${pkgs.bun}/bin/bun test";
       files = "\\.ts$";
       language = "system";
-      pass_filenames = true;
-    };
-    eslint = {
-      enable = true;
-      name = "eslint";
-      entry = "${pkgs.bun}/bin/bun run eslint";
-      files = "\\.ts$";
-      language = "system";
-      pass_filenames = true;
+      pass_filenames = false;
     };
   };
 
