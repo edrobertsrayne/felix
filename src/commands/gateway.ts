@@ -11,20 +11,25 @@ import { type GatewayStatus } from "../gateway.js";
 
 interface GatewayStartOptions {
   telegram?: boolean;
+  host?: string;
+  override?: boolean;
 }
 
 export async function startGateway(
   options: GatewayStartOptions,
 ): Promise<void> {
-  // TODO: Pass options to gateway-service via env vars or CLI args
-  void options;
-
-  if (isGatewayRunning()) {
+  if (isGatewayRunning() && !options.override) {
     console.log("Gateway is already running");
+    console.log("Use --override to stop and restart");
     return;
   }
 
-  const result = await startDaemon();
+  if (isGatewayRunning() && options.override) {
+    console.log("Stopping existing gateway...");
+    await stopDaemon();
+  }
+
+  const result = await startDaemon(options.host);
   if (!result) {
     console.error("Failed to start gateway");
     process.exit(1);

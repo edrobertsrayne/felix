@@ -19,8 +19,14 @@ program
     new Command("start")
       .description("Start the gateway in background")
       .option("--no-telegram", "Disable Telegram adapter")
+      .option("--host <ip>", "Host IP to bind to (e.g., 127.0.0.1, 0.0.0.0)")
+      .option("--override", "Stop existing gateway and restart")
       .action(async (options) => {
-        await startGateway({ telegram: options.telegram !== false });
+        await startGateway({
+          telegram: options.telegram !== false,
+          host: options.host,
+          override: options.override,
+        });
       }),
   )
   .addCommand(

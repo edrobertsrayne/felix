@@ -15,6 +15,11 @@ export async function runGatewayService(
 
   const config = resolveConfig(loadConfig());
 
+  const hostFromEnv = process.env.FELIX_GATEWAY_HOST;
+  if (hostFromEnv) {
+    config.gateway.host = hostFromEnv;
+  }
+
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     console.error("Error: OPENROUTER_API_KEY not set in environment");

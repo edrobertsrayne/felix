@@ -61,7 +61,7 @@ export function isGatewayRunning(): boolean {
   return isProcessRunning(pid);
 }
 
-export async function startDaemon(): Promise<boolean> {
+export async function startDaemon(host?: string): Promise<boolean> {
   const existingPid = readPidFile();
   if (existingPid && isProcessRunning(existingPid)) {
     console.error(`Gateway already running with PID ${existingPid}`);
@@ -77,11 +77,17 @@ export async function startDaemon(): Promise<boolean> {
   const out = fs.openSync(LOG_OUT, "a");
   const err = fs.openSync(LOG_ERR, "a");
 
+  const env = { ...process.env };
+  if (host) {
+    env.FELIX_GATEWAY_HOST = host;
+  }
+
   const child = Bun.spawn(["bun", "run", "src/gateway-service.ts"], {
     detached: true,
     stdin: "ignore",
     stdout: out,
     stderr: err,
+    env,
   });
 
   fs.closeSync(out);

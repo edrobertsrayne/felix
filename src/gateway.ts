@@ -12,10 +12,12 @@ type Database = any;
 
 export interface GatewayConfig {
   port: number;
+  host?: string;
 }
 
 export interface GatewayStatus {
   port: number;
+  host: string;
   clientCount: number;
   sessionCount: number;
   uptime: number;
@@ -78,6 +80,7 @@ export class Gateway {
   private startTime: number;
   private model: string;
   private telegramEnabled: boolean;
+  private host: string;
 
   constructor(
     config: GatewayConfig,
@@ -85,7 +88,8 @@ export class Gateway {
     messageHandler: MessageHandler,
     streamHandler?: StreamHandler,
   ) {
-    this.wss = new WebSocketServer({ port: config.port });
+    this.host = config.host || "127.0.0.1";
+    this.wss = new WebSocketServer({ port: config.port, host: this.host });
     this.messageHandler = messageHandler;
     this.streamHandler = streamHandler;
     this.workspace = initWorkspace(appConfig.workspace);
@@ -104,10 +108,10 @@ export class Gateway {
       `[Gateway] Context: ${this.contextConfig.maxTokens} tokens (${this.contextConfig.guardThreshold * 100}% threshold)`,
     );
 
-    this.setupServer();
+    this.setupServer(this.host);
   }
 
-  private setupServer(): void {
+  private setupServer(host: string): void {
     this.wss.on("connection", (ws: WebSocket) => {
       this.clients.add(ws);
       console.log(`[Gateway] Client connected (${this.clients.size} total)`);
@@ -140,7 +144,8 @@ export class Gateway {
     this.wss.on("listening", () => {
       const addr = this.wss.address();
       const port = typeof addr === "object" ? addr?.port : addr;
-      console.log(`[Gateway] Listening on ws://127.0.0.1:${port}`);
+      const resolvedHost = typeof addr === "object" ? addr?.address : host;
+      console.log(`[Gateway] Listening on ws://${resolvedHost}:${port}`);
     });
   }
 
@@ -307,12 +312,15 @@ export class Gateway {
       case "status": {
         const addr = this.wss.address();
         const port = typeof addr === "object" ? (addr?.port ?? 0) : 0;
+        const resolvedHost =
+          typeof addr === "object" ? (addr?.address ?? this.host) : this.host;
         this.send(ws, {
           type: "status",
           content: "",
           timestamp: Date.now(),
           statusData: {
             port,
+            host: resolvedHost,
             clientCount: this.clients.size,
             sessionCount: getSessionCount(this.workspace),
             uptime: Date.now() - this.startTime,

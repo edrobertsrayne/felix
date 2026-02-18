@@ -8,6 +8,7 @@ export interface Config {
   guardThreshold: number;
   gateway: {
     port: number;
+    host?: string;
   };
   model: string;
   systemPrompt: string;
@@ -26,6 +27,7 @@ const DEFAULT_CONFIG: Config = {
   guardThreshold: 0.8,
   gateway: {
     port: 18789,
+    host: "127.0.0.1",
   },
   model: "openrouter/auto",
   systemPrompt: "You are a helpful AI assistant. Keep responses concise.",
