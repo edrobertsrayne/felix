@@ -1,7 +1,7 @@
-import { OpenRouter } from '@openrouter/sdk';
+import { OpenRouter } from "@openrouter/sdk";
 
 export interface Message {
-  role: 'system' | 'user' | 'assistant';
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -20,13 +20,13 @@ export class LLMClient {
     this.client = new OpenRouter({
       apiKey: config.apiKey,
     });
-    this.model = config.model || 'openrouter/auto';
-    this.systemPrompt = config.systemPrompt || 'You are a helpful assistant.';
+    this.model = config.model || "openrouter/auto";
+    this.systemPrompt = config.systemPrompt || "You are a helpful assistant.";
   }
 
   async chat(messages: Message[]): Promise<string> {
     const fullMessages: Message[] = [
-      { role: 'system', content: this.systemPrompt },
+      { role: "system", content: this.systemPrompt },
       ...messages,
     ];
 
@@ -35,21 +35,24 @@ export class LLMClient {
       messages: fullMessages,
     });
 
-    return response.choices[0]?.message?.content || '';
+    return response.choices[0]?.message?.content || "";
   }
 
   async *chatStream(messages: Message[]): AsyncGenerator<string> {
     const fullMessages: Message[] = [
-      { role: 'system', content: this.systemPrompt },
+      { role: "system", content: this.systemPrompt },
       ...messages,
     ];
 
-    const response = await this.client.chat.send({
-      model: this.model,
-      messages: fullMessages,
-    }, {
-      stream: true,
-    });
+    const response = await this.client.chat.send(
+      {
+        model: this.model,
+        messages: fullMessages,
+      },
+      {
+        stream: true,
+      },
+    );
 
     for await (const chunk of response) {
       const content = chunk.choices[0]?.delta?.content;

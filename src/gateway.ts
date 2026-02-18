@@ -1,24 +1,27 @@
-import { WebSocketServer, WebSocket } from 'ws';
-import type { Message } from './client.js';
+import { WebSocketServer, WebSocket } from "ws";
+import type { Message } from "./client.js";
 
 export interface GatewayConfig {
   port: number;
 }
 
 export interface ClientMessage {
-  type: 'message' | 'history' | 'clear';
+  type: "message" | "history" | "clear";
   content?: string;
   sessionId?: string;
 }
 
 export interface ServerMessage {
-  type: 'response' | 'error' | 'history';
+  type: "response" | "error" | "history";
   content: string;
   sessionId?: string;
   timestamp: number;
 }
 
-type MessageHandler = (sessionId: string, messages: Message[]) => Promise<string>;
+type MessageHandler = (
+  sessionId: string,
+  messages: Message[],
+) => Promise<string>;
 
 export class Gateway {
   private wss: WebSocketServer;
@@ -33,88 +36,95 @@ export class Gateway {
   }
 
   private setupServer(): void {
-    this.wss.on('connection', (ws: WebSocket) => {
+    this.wss.on("connection", (ws: WebSocket) => {
       this.clients.add(ws);
       console.log(`[Gateway] Client connected (${this.clients.size} total)`);
 
-      ws.on('message', (data: Buffer) => {
+      ws.on("message", (data: Buffer) => {
         try {
           const msg: ClientMessage = JSON.parse(data.toString());
           this.handleMessage(ws, msg);
-        } catch (err) {
+        } catch {
           this.send(ws, {
-            type: 'error',
-            content: 'Invalid JSON message',
+            type: "error",
+            content: "Invalid JSON message",
             timestamp: Date.now(),
           });
         }
       });
 
-      ws.on('close', () => {
+      ws.on("close", () => {
         this.clients.delete(ws);
-        console.log(`[Gateway] Client disconnected (${this.clients.size} total)`);
+        console.log(
+          `[Gateway] Client disconnected (${this.clients.size} total)`,
+        );
       });
 
-      ws.on('error', (err) => {
+      ws.on("error", (err) => {
         console.error(`[Gateway] WebSocket error:`, err.message);
       });
     });
 
-    this.wss.on('listening', () => {
+    this.wss.on("listening", () => {
       const addr = this.wss.address();
-      const port = typeof addr === 'object' ? addr?.port : addr;
+      const port = typeof addr === "object" ? addr?.port : addr;
       console.log(`[Gateway] Listening on ws://127.0.0.1:${port}`);
     });
   }
 
-  private async handleMessage(ws: WebSocket, msg: ClientMessage): Promise<void> {
-    const sessionId = msg.sessionId || 'default';
+  private async handleMessage(
+    ws: WebSocket,
+    msg: ClientMessage,
+  ): Promise<void> {
+    const sessionId = msg.sessionId || "default";
 
     switch (msg.type) {
-      case 'message':
+      case "message": {
         if (!msg.content) {
-          this.send(ws, { type: 'error', content: 'No content', timestamp: Date.now() });
+          this.send(ws, { type: "error", content: "No content", timestamp: Date.now() });
           return;
         }
 
-        let history = this.sessions.get(sessionId) || [];
-        history.push({ role: 'user', content: msg.content });
+        const history = this.sessions.get(sessionId) || [];
+        history.push({ role: "user", content: msg.content });
 
         try {
           const response = await this.messageHandler(sessionId, history);
-          history.push({ role: 'assistant', content: response });
+          history.push({ role: "assistant", content: response });
           this.sessions.set(sessionId, history);
 
           this.send(ws, {
-            type: 'response',
+            type: "response",
             content: response,
             sessionId,
             timestamp: Date.now(),
           });
         } catch (err) {
           this.send(ws, {
-            type: 'error',
-            content: err instanceof Error ? err.message : 'Unknown error',
+            type: "error",
+            content: err instanceof Error ? err.message : "Unknown error",
             timestamp: Date.now(),
           });
         }
         break;
+      }
 
-      case 'history':
+      case "history": {
         const historyData = this.sessions.get(sessionId) || [];
         this.send(ws, {
-          type: 'history',
+          type: "history",
           content: JSON.stringify(historyData),
           sessionId,
           timestamp: Date.now(),
         });
         break;
+      }
 
-      case 'clear':
+      case "clear":
         this.sessions.delete(sessionId);
         this.send(ws, {
-          type: 'response',
-          content: 'Session cleared',
+          type: "response",
+          content: "Session cleared",
           sessionId,
           timestamp: Date.now(),
         });

@@ -34,18 +34,50 @@ bunx tsc --noEmit
 
 ### Testing
 
-No test framework is currently configured. When adding tests, use:
+This project uses Bun's built-in test runner. Tests are located in `src/__tests__/`.
 
 ```bash
-# Run all tests (configure in package.json)
+# Run all tests
 bun test
 
 # Run a single test file
-bun test run src/client.test.ts
+bun test run src/__tests__/gateway.test.ts
 
 # Run tests matching a pattern
 bun test run "src/**/*.test.ts"
 ```
+
+### Test-Driven Development (TDD)
+
+Follow the Red-Green-Refactor cycle:
+
+1. **Red** - Write a failing test first
+   ```typescript
+   test('should return response from LLM', async () => {
+     const client = new LLMClient({ apiKey: 'test' });
+     const response = await client.chat([{ role: 'user', content: 'Hi' }]);
+     expect(response).toBe('Hello');
+   });
+   ```
+
+2. **Green** - Write minimal code to make it pass
+   ```typescript
+   async chat(messages: Message[]): Promise<string> {
+     return 'Hello'; // Minimal implementation
+   }
+   ```
+
+3. **Refactor** - Improve code while keeping tests passing
+
+**TDD Guidelines:**
+- Write tests before implementation for new features
+- Tests should be focused, one concept per test
+- Use descriptive test names: `test('should handle empty messages')`
+- Group related tests with `describe()`
+- Use `beforeEach` for setup, not manual setup in each test
+- Mock external dependencies (API calls, WebSocket connections)
+- Test happy path and error cases
+- Run `bun test` before committing
 
 ---
 

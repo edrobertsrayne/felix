@@ -1,12 +1,13 @@
-import blessed from 'blessed';
-import { WebSocket } from 'ws';
+import blessed from "blessed";
+import { WebSocket } from "ws";
+import type { ServerMessage } from "./gateway.js";
 
 export interface TUIConfig {
   gatewayUrl: string;
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
 }
@@ -18,47 +19,47 @@ export class TUI {
   private statusLine: blessed.Widgets.BoxElement;
   private ws: WebSocket | null = null;
   private messages: ChatMessage[] = [];
-  private sessionId: string = 'default';
+  private sessionId: string = "default";
   private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(private config: TUIConfig) {
     this.screen = blessed.screen({
       smartCSR: true,
-      title: 'My Agent',
+      title: "My Agent",
     });
 
     this.statusLine = blessed.box({
       top: 0,
       left: 0,
-      width: '100%',
+      width: "100%",
       height: 1,
-      content: 'Connecting to gateway...',
-      style: { bg: 'blue', fg: 'white' },
+      content: "Connecting to gateway...",
+      style: { bg: "blue", fg: "white" },
     });
 
     this.chatBox = blessed.box({
       top: 1,
       left: 0,
-      width: '100%',
-      height: '100%-3',
+      width: "100%",
+      height: "100%-3",
       scrollable: true,
       alwaysScroll: true,
-      style: { fg: 'white' },
+      style: { fg: "white" },
     });
 
     this.inputBox = blessed.textbox({
       bottom: 0,
       left: 0,
-      width: '100%',
+      width: "100%",
       height: 2,
-      style: { fg: 'green' },
+      style: { fg: "green" },
     });
 
     this.screen.append(this.statusLine);
     this.screen.append(this.chatBox);
     this.screen.append(this.inputBox);
 
-    this.inputBox.key('enter', () => {
+    this.inputBox.key("enter", () => {
       const content = this.inputBox.getValue().trim();
       if (content) {
         this.sendMessage(content);
@@ -67,17 +68,17 @@ export class TUI {
       this.screen.render();
     });
 
-    this.inputBox.key('C-c', () => {
+    this.inputBox.key("C-c", () => {
       this.disconnect();
       process.exit(0);
     });
 
-    this.screen.key('q', () => {
+    this.screen.key("q", () => {
       this.disconnect();
       process.exit(0);
     });
 
-    this.screen.key(['escape', 'C-c'], () => {
+    this.screen.key(["escape", "C-c"], () => {
       this.disconnect();
       process.exit(0);
     });
@@ -88,48 +89,50 @@ export class TUI {
   connect(): void {
     this.ws = new WebSocket(this.config.gatewayUrl);
 
-    this.ws.on('open', () => {
-      this.updateStatus('Connected', 'green');
+    this.ws.on("open", () => {
+      this.updateStatus("Connected", "green");
       this.loadHistory();
     });
 
-    this.ws.on('message', (data: Buffer) => {
+    this.ws.on("message", (data: Buffer) => {
       try {
         const msg = JSON.parse(data.toString());
         this.handleMessage(msg);
       } catch (err) {
-        console.error('Failed to parse message:', err);
+        console.error("Failed to parse message:", err);
       }
     });
 
-    this.ws.on('close', () => {
-      this.updateStatus('Disconnected', 'red');
+    this.ws.on("close", () => {
+      this.updateStatus("Disconnected", "red");
       this.scheduleReconnect();
     });
 
-    this.ws.on('error', (err) => {
-      this.updateStatus('Error: ' + err.message, 'red');
+    this.ws.on("error", (err) => {
+      this.updateStatus("Error: " + err.message, "red");
     });
   }
 
-  private handleMessage(msg: any): void {
-    if (msg.type === 'response') {
+  private handleMessage(msg: ServerMessage): void {
+    if (msg.type === "response") {
       this.messages.push({
-        role: 'assistant',
+        role: "assistant",
         content: msg.content,
         timestamp: msg.timestamp,
       });
-    } else if (msg.type === 'error') {
+    } else if (msg.type === "error") {
       this.messages.push({
-        role: 'system',
-        content: 'Error: ' + msg.content,
+        role: "system",
+        content: "Error: " + msg.content,
         timestamp: msg.timestamp,
       });
-    } else if (msg.type === 'history') {
+    } else if (msg.type === "history") {
       try {
         const history = JSON.parse(msg.content);
         this.messages = history;
-      } catch {}
+      } catch {
+        // Ignore parse errors
+      }
     }
 
     this.render();
@@ -138,8 +141,8 @@ export class TUI {
   private sendMessage(content: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.messages.push({
-        role: 'system',
-        content: 'Not connected to gateway',
+        role: "system",
+        content: "Not connected to gateway",
         timestamp: Date.now(),
       });
       this.render();
@@ -147,33 +150,37 @@ export class TUI {
     }
 
     this.messages.push({
-      role: 'user',
+      role: "user",
       content,
       timestamp: Date.now(),
     });
 
-    this.ws.send(JSON.stringify({
-      type: 'message',
-      content,
-      sessionId: this.sessionId,
-    }));
+    this.ws.send(
+      JSON.stringify({
+        type: "message",
+        content,
+        sessionId: this.sessionId,
+      }),
+    );
 
     this.render();
   }
 
   private loadHistory(): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        type: 'history',
-        sessionId: this.sessionId,
-      }));
+      this.ws.send(
+        JSON.stringify({
+          type: "history",
+          sessionId: this.sessionId,
+        }),
+      );
     }
   }
 
   private updateStatus(text: string, color: string): void {
     this.statusLine.setContent(text);
     this.statusLine.style.bg = color;
-    this.statusLine.style.fg = 'white';
+    this.statusLine.style.fg = "white";
     this.screen.render();
   }
 
@@ -197,16 +204,19 @@ export class TUI {
   }
 
   private render(): void {
-    let content = '';
+    let content = "";
     for (const msg of this.messages) {
-      const prefix = msg.role === 'user' ? '> ' : msg.role === 'assistant' ? '< ' : '! ';
-      const lines = msg.content.split('\n');
+      const prefix =
+        msg.role === "user" ? "> " : msg.role === "assistant" ? "< " : "! ";
+      const lines = msg.content.split("\n");
       for (const line of lines) {
-        content += prefix + line + '\n';
+        content += prefix + line + "\n";
       }
-      content += '\n';
+      content += "\n";
     }
-    this.chatBox.setContent(content || 'No messages yet. Type something to start.');
+    this.chatBox.setContent(
+      content || "No messages yet. Type something to start.",
+    );
     this.screen.render();
   }
 
