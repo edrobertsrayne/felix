@@ -66,9 +66,25 @@ export async function startDaemon(): Promise<boolean> {
   const child = Bun.spawn(["bun", "run", "src/gateway-service.ts"], {
     detached: true,
     stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
   });
+
+  child.stdout?.pipeTo(
+    new WritableStream({
+      write(chunk) {
+        process.stdout.write(chunk.toString());
+      },
+    }),
+  );
+
+  child.stderr?.pipeTo(
+    new WritableStream({
+      write(chunk) {
+        process.stderr.write(chunk.toString());
+      },
+    }),
+  );
 
   writePidFile(child.pid);
   console.log(`Gateway started with PID ${child.pid}`);
