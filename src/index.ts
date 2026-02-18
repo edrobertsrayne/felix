@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { Gateway } from "./gateway.js";
 import { LLMClient, type Message } from "./client.js";
-import { TUI } from "./tui.js";
+import { startTUI } from "./tui.js";
 import { loadConfig, resolveConfig } from "./config.js";
 
 dotenv.config();
@@ -31,13 +31,16 @@ const gateway = new Gateway(
     const response = await llm.chat(messages);
     return response;
   },
+  async function* (sessionId: string, messages: Message[]) {
+    console.log(`[Gateway] Streaming response for session: ${sessionId}`);
+    yield* llm.chatStream(messages);
+  },
 );
 
-const tui = new TUI({
+startTUI({
   gatewayUrl: `ws://127.0.0.1:${config.gateway.port}`,
+  model: config.model,
 });
-
-tui.start();
 
 process.on("SIGINT", () => {
   console.log("\nShutting down...");

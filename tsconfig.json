@@ -11,7 +11,10 @@
     "rootDir": "./src",
     "declaration": true,
     "resolveJsonModule": true,
-    "types": ["node", "bun-types"]
+    "types": ["node", "bun-types"],
+    "jsx": "react",
+    "jsxFactory": "React.createElement",
+    "jsxFragmentFactory": "React.Fragment"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

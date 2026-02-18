@@ -36,7 +36,15 @@ export interface ClientMessage {
 }
 
 export interface ServerMessage {
-  type: "response" | "error" | "history" | "memory" | "searchResults";
+  type:
+    | "response"
+    | "error"
+    | "history"
+    | "memory"
+    | "searchResults"
+    | "stream_start"
+    | "stream_chunk"
+    | "stream_end";
   content: string;
   sessionId?: string;
   timestamp: number;
@@ -47,9 +55,15 @@ type MessageHandler = (
   messages: Message[],
 ) => Promise<string>;
 
+export type StreamHandler = (
+  sessionId: string,
+  messages: Message[],
+) => AsyncGenerator<string>;
+
 export class Gateway {
   private wss: WebSocketServer;
   private messageHandler: MessageHandler;
+  private streamHandler?: StreamHandler;
   private clients: Set<WebSocket> = new Set();
   private workspace: Workspace;
   private contextConfig: ContextConfig;
@@ -60,9 +74,11 @@ export class Gateway {
     config: GatewayConfig,
     appConfig: AppConfig,
     messageHandler: MessageHandler,
+    streamHandler?: StreamHandler,
   ) {
     this.wss = new WebSocketServer({ port: config.port });
     this.messageHandler = messageHandler;
+    this.streamHandler = streamHandler;
     this.workspace = initWorkspace(appConfig.workspace);
     this.contextConfig = {
       maxTokens: appConfig.contextWindow,
@@ -156,7 +172,45 @@ export class Gateway {
         }
 
         try {
-          const response = await this.messageHandler(sessionId, history);
+          let response: string;
+
+          if (this.streamHandler) {
+            this.send(ws, {
+              type: "stream_start",
+              content: "",
+              sessionId,
+              timestamp: Date.now(),
+            });
+
+            let fullContent = "";
+            const stream = this.streamHandler(sessionId, history);
+            for await (const chunk of stream) {
+              fullContent += chunk;
+              this.send(ws, {
+                type: "stream_chunk",
+                content: chunk,
+                sessionId,
+                timestamp: Date.now(),
+              });
+            }
+
+            response = fullContent;
+            this.send(ws, {
+              type: "stream_end",
+              content: response,
+              sessionId,
+              timestamp: Date.now(),
+            });
+          } else {
+            response = await this.messageHandler(sessionId, history);
+            this.send(ws, {
+              type: "response",
+              content: response,
+              sessionId,
+              timestamp: Date.now(),
+            });
+          }
+
           history.push({ role: "assistant", content: response });
 
           const entry: SessionEntry = {
@@ -177,13 +231,6 @@ export class Gateway {
             this.workspace,
             `User: ${msg.content}\nAssistant: ${response}`,
           );
-
-          this.send(ws, {
-            type: "response",
-            content: response,
-            sessionId,
-            timestamp: Date.now(),
-          });
         } catch (err) {
           this.send(ws, {
             type: "error",
