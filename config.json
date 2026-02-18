@@ -1,5 +1,5 @@
 {
-  "workspace": "./agent-workspace",
+  "workspace": "$HOME/.agent",
   "contextWindow": 128000,
   "guardThreshold": 0.8,
   "gateway": {
