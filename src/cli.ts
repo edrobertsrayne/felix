@@ -19,8 +19,8 @@ program
     new Command("start")
       .description("Start the gateway in background")
       .option("--no-telegram", "Disable Telegram adapter")
-      .action((options) => {
-        startGateway({ telegram: options.telegram !== false });
+      .action(async (options) => {
+        await startGateway({ telegram: options.telegram !== false });
       }),
   )
   .addCommand(

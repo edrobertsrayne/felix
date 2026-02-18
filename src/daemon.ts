@@ -6,6 +6,15 @@ const PID_DIR =
   process.env.FELIX_PID_DIR ||
   path.join(os.homedir(), ".local", "share", "felix");
 const PID_FILE = path.join(PID_DIR, "gateway.pid");
+const LOG_DIR = path.join(PID_DIR, "logs");
+const LOG_OUT = path.join(LOG_DIR, "gateway.out.log");
+const LOG_ERR = path.join(LOG_DIR, "gateway.err.log");
+
+function ensureLogDir(): void {
+  if (!fs.existsSync(LOG_DIR)) {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+  }
+}
 
 export function getPidFilePath(): string {
   return PID_FILE;
@@ -63,28 +72,22 @@ export async function startDaemon(): Promise<boolean> {
     removePidFile();
   }
 
+  ensureLogDir();
+
+  const out = fs.openSync(LOG_OUT, "a");
+  const err = fs.openSync(LOG_ERR, "a");
+
   const child = Bun.spawn(["bun", "run", "src/gateway-service.ts"], {
     detached: true,
     stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
+    stdout: out,
+    stderr: err,
   });
 
-  child.stdout?.pipeTo(
-    new WritableStream({
-      write(chunk) {
-        process.stdout.write(chunk.toString());
-      },
-    }),
-  );
+  fs.closeSync(out);
+  fs.closeSync(err);
 
-  child.stderr?.pipeTo(
-    new WritableStream({
-      write(chunk) {
-        process.stderr.write(chunk.toString());
-      },
-    }),
-  );
+  child.unref();
 
   writePidFile(child.pid);
   console.log(`Gateway started with PID ${child.pid}`);
