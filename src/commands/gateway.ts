@@ -1,4 +1,10 @@
-import { startDaemon, stopDaemon, isGatewayRunning } from "../daemon.js";
+import {
+  startDaemon,
+  stopDaemon,
+  isGatewayRunning,
+  readPidFile,
+  isProcessRunning,
+} from "../daemon.js";
 
 export interface GatewayStartOptions {
   telegram?: boolean;
@@ -27,5 +33,22 @@ export async function stopGateway(): Promise<void> {
   if (!result) {
     console.error("Failed to stop gateway");
     process.exit(1);
+  }
+}
+
+export async function statusGateway(): Promise<void> {
+  const pid = readPidFile();
+
+  if (!pid) {
+    console.log("Gateway is not running");
+    return;
+  }
+
+  const running = isProcessRunning(pid);
+
+  if (running) {
+    console.log(`Gateway is running (PID: ${pid})`);
+  } else {
+    console.log(`Gateway is not running (stale PID: ${pid})`);
   }
 }

@@ -9,7 +9,11 @@
     "dev": "bun run --watch src/index.ts",
     "build": "bun build src/cli.ts --outdir dist --target node --external react-devtools-core",
     "build:all": "bun build src/cli.ts --outdir dist --target node --external react-devtools-core && bun build src/gateway-service.ts --outdir dist --target node --external react-devtools-core && bun build src/index.ts --outdir dist --target node --external react-devtools-core",
-    "start": "bun run src/index.ts"
+    "start": "bun run src/index.ts",
+    "gateway": "bun run src/cli.ts gateway",
+    "gateway:start": "bun run src/cli.ts gateway start",
+    "gateway:stop": "bun run src/cli.ts gateway stop",
+    "tui": "bun run src/cli.ts tui"
   },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",

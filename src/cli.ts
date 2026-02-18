@@ -1,7 +1,11 @@
 #!/usr/bin/env bun
 
 import { Command } from "commander";
-import { startGateway, stopGateway } from "./commands/gateway.js";
+import {
+  startGateway,
+  stopGateway,
+  statusGateway,
+} from "./commands/gateway.js";
 import { startTUI } from "./commands/tui.js";
 
 const program = new Command();
@@ -23,6 +27,11 @@ program
     new Command("stop")
       .description("Stop the running gateway")
       .action(stopGateway),
+  )
+  .addCommand(
+    new Command("status")
+      .description("Show gateway status")
+      .action(statusGateway),
   );
 
 program
