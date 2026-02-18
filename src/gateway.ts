@@ -1,20 +1,12 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Message } from "./client.js";
 import { type Workspace, initWorkspace } from "./workspace.js";
-import {
-  loadSession,
-  appendEntry,
-  clearSession,
-  type SessionEntry,
-} from "./session.js";
-import { readMemory, writeMemory, appendToDailyLog } from "./memory.js";
-import {
-  type ContextConfig,
-  checkContextStatus,
-  truncateMessages,
-} from "./context.js";
+import { loadSession, clearSession } from "./session.js";
+import { readMemory, writeMemory } from "./memory.js";
+import { type ContextConfig } from "./context.js";
 import { type Config as AppConfig } from "./config.js";
 import { initSearch, indexAllMemory, search, closeSearch } from "./search.js";
+import { processMessage, type PipelineConfig } from "./pipeline.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Database = any;
 
@@ -149,28 +141,6 @@ export class Gateway {
           return;
         }
 
-        const history = loadSession(this.workspace, sessionId);
-        history.push({ role: "user", content: msg.content });
-
-        const status = checkContextStatus(
-          history,
-          this.systemPrompt,
-          this.contextConfig,
-        );
-        if (status.needsTruncation) {
-          const maxTokens = Math.floor(
-            this.contextConfig.maxTokens *
-              this.contextConfig.guardThreshold *
-              0.8,
-          );
-          const truncated = truncateMessages(history, maxTokens);
-          history.length = 0;
-          history.push(...truncated);
-          console.log(
-            `[Gateway] Truncated session ${sessionId} to ${truncated.length} messages (${status.currentTokens} -> ${truncated.length * 50} estimated)`,
-          );
-        }
-
         try {
           let response: string;
 
@@ -181,6 +151,9 @@ export class Gateway {
               sessionId,
               timestamp: Date.now(),
             });
+
+            const history = loadSession(this.workspace, sessionId);
+            history.push({ role: "user", content: msg.content });
 
             let fullContent = "";
             const stream = this.streamHandler(sessionId, history);
@@ -202,7 +175,20 @@ export class Gateway {
               timestamp: Date.now(),
             });
           } else {
-            response = await this.messageHandler(sessionId, history);
+            const pipelineConfig: PipelineConfig = {
+              workspace: this.workspace,
+              contextConfig: this.contextConfig,
+              systemPrompt: this.systemPrompt,
+            };
+
+            const result = await processMessage(
+              pipelineConfig,
+              sessionId,
+              msg.content,
+              this.messageHandler,
+            );
+            response = result.response;
+
             this.send(ws, {
               type: "response",
               content: response,
@@ -210,27 +196,6 @@ export class Gateway {
               timestamp: Date.now(),
             });
           }
-
-          history.push({ role: "assistant", content: response });
-
-          const entry: SessionEntry = {
-            role: "user",
-            content: msg.content,
-            timestamp: Date.now(),
-          };
-          appendEntry(this.workspace, sessionId, entry);
-
-          const responseEntry: SessionEntry = {
-            role: "assistant",
-            content: response,
-            timestamp: Date.now(),
-          };
-          appendEntry(this.workspace, sessionId, responseEntry);
-
-          appendToDailyLog(
-            this.workspace,
-            `User: ${msg.content}\nAssistant: ${response}`,
-          );
         } catch (err) {
           this.send(ws, {
             type: "error",

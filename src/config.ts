@@ -10,6 +10,13 @@ export interface Config {
   };
   model: string;
   systemPrompt: string;
+  tui?: {
+    enabled: boolean;
+  };
+  telegram?: {
+    enabled: boolean;
+    allowedChats: string[];
+  };
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -21,6 +28,9 @@ const DEFAULT_CONFIG: Config = {
   },
   model: "openrouter/auto",
   systemPrompt: "You are a helpful AI assistant. Keep responses concise.",
+  tui: {
+    enabled: true,
+  },
 };
 
 export function loadConfig(configPath?: string): Config {
@@ -40,6 +50,10 @@ export function loadConfig(configPath?: string): Config {
       gateway: {
         ...DEFAULT_CONFIG.gateway,
         ...userConfig.gateway,
+      },
+      tui: {
+        ...DEFAULT_CONFIG.tui,
+        ...userConfig.tui,
       },
     };
   } catch (err) {

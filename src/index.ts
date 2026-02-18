@@ -3,6 +3,7 @@ import { Gateway } from "./gateway.js";
 import { LLMClient, type Message } from "./client.js";
 import { startTUI } from "./tui.js";
 import { loadConfig, resolveConfig } from "./config.js";
+import { TelegramAdapter } from "./adapters/telegram.js";
 
 dotenv.config();
 
@@ -37,18 +38,45 @@ const gateway = new Gateway(
   },
 );
 
-startTUI({
-  gatewayUrl: `ws://127.0.0.1:${config.gateway.port}`,
-  model: config.model,
-});
+let telegramAdapter: TelegramAdapter | undefined;
+
+if (config.telegram?.enabled) {
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!telegramToken) {
+    console.error("Error: TELEGRAM_BOT_TOKEN not set in environment");
+    console.error("Create a .env file with TELEGRAM_BOT_TOKEN=your-bot-token");
+    process.exit(1);
+  }
+
+  telegramAdapter = new TelegramAdapter(
+    {
+      botToken: telegramToken,
+      allowedChats: config.telegram.allowedChats,
+    },
+    async (sessionId: string, messages: Message[]) => {
+      const response = await llm.chat(messages);
+      return response;
+    },
+  );
+  telegramAdapter.start();
+}
+
+if (config.tui?.enabled !== false) {
+  startTUI({
+    gatewayUrl: `ws://127.0.0.1:${config.gateway.port}`,
+    model: config.model,
+  });
+}
 
 process.on("SIGINT", () => {
   console.log("\nShutting down...");
+  telegramAdapter?.stop();
   gateway.close();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
+  telegramAdapter?.stop();
   gateway.close();
   process.exit(0);
 });
