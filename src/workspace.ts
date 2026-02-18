@@ -7,6 +7,7 @@ export interface Workspace {
   memoryDir: string;
   memoryFile: string;
   configFile: string;
+  agentsFile: string;
 }
 
 export function initWorkspace(workspacePath: string): Workspace {
@@ -15,6 +16,7 @@ export function initWorkspace(workspacePath: string): Workspace {
   const memoryDir = path.join(root, "memory");
   const memoryFile = path.join(root, "MEMORY.md");
   const configFile = path.join(root, "config.json");
+  const agentsFile = path.join(root, "AGENTS.md");
 
   fs.mkdirSync(sessionsDir, { recursive: true });
   fs.mkdirSync(memoryDir, { recursive: true });
@@ -29,6 +31,7 @@ export function initWorkspace(workspacePath: string): Workspace {
     memoryDir,
     memoryFile,
     configFile,
+    agentsFile,
   };
 }
 

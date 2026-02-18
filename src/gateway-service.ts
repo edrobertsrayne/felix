@@ -31,6 +31,7 @@ export async function runGatewayService(
     apiKey,
     model: config.model,
     systemPrompt: config.systemPrompt,
+    workspace: config.workspace,
   });
 
   const gateway = new Gateway(
@@ -38,12 +39,8 @@ export async function runGatewayService(
     config,
     async (sessionId: string, messages: Message[]) => {
       console.log(`[Gateway] Processing message for session: ${sessionId}`);
-      const response = await llm.chat(messages);
+      const response = await llm.chatWithTools(messages);
       return response;
-    },
-    async function* (sessionId: string, messages: Message[]) {
-      console.log(`[Gateway] Streaming response for session: ${sessionId}`);
-      yield* llm.chatStream(messages);
     },
   );
 

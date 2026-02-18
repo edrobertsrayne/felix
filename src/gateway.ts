@@ -48,9 +48,6 @@ export interface ServerMessage {
     | "history"
     | "memory"
     | "searchResults"
-    | "stream_start"
-    | "stream_chunk"
-    | "stream_end"
     | "status";
   content: string;
   sessionId?: string;
@@ -63,15 +60,9 @@ type MessageHandler = (
   messages: Message[],
 ) => Promise<string>;
 
-export type StreamHandler = (
-  sessionId: string,
-  messages: Message[],
-) => AsyncGenerator<string>;
-
 export class Gateway {
   private wss: WebSocketServer;
   private messageHandler: MessageHandler;
-  private streamHandler?: StreamHandler;
   private clients: Set<WebSocket> = new Set();
   private workspace: Workspace;
   private contextConfig: ContextConfig;
@@ -86,12 +77,10 @@ export class Gateway {
     config: GatewayConfig,
     appConfig: AppConfig,
     messageHandler: MessageHandler,
-    streamHandler?: StreamHandler,
   ) {
     this.host = config.host || "127.0.0.1";
     this.wss = new WebSocketServer({ port: config.port, host: this.host });
     this.messageHandler = messageHandler;
-    this.streamHandler = streamHandler;
     this.workspace = initWorkspace(appConfig.workspace);
     this.contextConfig = {
       maxTokens: appConfig.contextWindow,
@@ -167,60 +156,25 @@ export class Gateway {
         }
 
         try {
-          let response: string;
+          const pipelineConfig: PipelineConfig = {
+            workspace: this.workspace,
+            contextConfig: this.contextConfig,
+            systemPrompt: this.systemPrompt,
+          };
 
-          if (this.streamHandler) {
-            this.send(ws, {
-              type: "stream_start",
-              content: "",
-              sessionId,
-              timestamp: Date.now(),
-            });
+          const result = await processMessage(
+            pipelineConfig,
+            sessionId,
+            msg.content,
+            this.messageHandler,
+          );
 
-            const history = loadSession(this.workspace, sessionId);
-            history.push({ role: "user", content: msg.content });
-
-            let fullContent = "";
-            const stream = this.streamHandler(sessionId, history);
-            for await (const chunk of stream) {
-              fullContent += chunk;
-              this.send(ws, {
-                type: "stream_chunk",
-                content: chunk,
-                sessionId,
-                timestamp: Date.now(),
-              });
-            }
-
-            response = fullContent;
-            this.send(ws, {
-              type: "stream_end",
-              content: response,
-              sessionId,
-              timestamp: Date.now(),
-            });
-          } else {
-            const pipelineConfig: PipelineConfig = {
-              workspace: this.workspace,
-              contextConfig: this.contextConfig,
-              systemPrompt: this.systemPrompt,
-            };
-
-            const result = await processMessage(
-              pipelineConfig,
-              sessionId,
-              msg.content,
-              this.messageHandler,
-            );
-            response = result.response;
-
-            this.send(ws, {
-              type: "response",
-              content: response,
-              sessionId,
-              timestamp: Date.now(),
-            });
-          }
+          this.send(ws, {
+            type: "response",
+            content: result.response,
+            sessionId,
+            timestamp: Date.now(),
+          });
         } catch (err) {
           this.send(ws, {
             type: "error",

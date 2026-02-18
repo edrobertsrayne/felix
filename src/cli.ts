@@ -7,10 +7,22 @@ import {
   statusGateway,
 } from "./commands/gateway.js";
 import { startTUI } from "./commands/tui.js";
+import { runHeadless } from "./commands/headless.js";
 
 const program = new Command();
 
-program.name("felix").description("Felix AI Agent CLI").version("1.0.0");
+program
+  .name("felix")
+  .description("Felix AI Agent CLI")
+  .version("1.0.0")
+  .option("-p, --prompt <text>", "Run a single prompt headlessly and exit")
+  .action(async (options) => {
+    if (options.prompt) {
+      await runHeadless({ prompt: options.prompt });
+    } else {
+      program.help();
+    }
+  });
 
 program
   .command("gateway")
@@ -49,4 +61,4 @@ program
     startTUI({ url: options.url, autoStart: options.autoStart !== false });
   });
 
-program.parse();
+await program.parseAsync();

@@ -4,6 +4,8 @@ import { LLMClient, type Message } from "./client.js";
 import { startTUI } from "./tui.js";
 import { loadConfig, resolveConfig } from "./config.js";
 import { TelegramAdapter } from "./adapters/telegram.js";
+import { initWorkspace } from "./workspace.js";
+import { loadAgentsInstructions } from "./pipeline.js";
 
 dotenv.config();
 
@@ -18,10 +20,32 @@ if (!apiKey) {
   process.exit(1);
 }
 
+const workspace = initWorkspace(config.workspace);
+const agentsInstructions = loadAgentsInstructions(workspace);
+
+// Inject workspace path information
+const workspaceInfo = `
+
+## Workspace Configuration
+Your workspace absolute path: ${workspace.root}
+Always use relative paths in tool calls (e.g., "README.md", not "${workspace.root}/README.md").
+The tools will automatically resolve relative paths within this workspace.
+`;
+
+const fullSystemPrompt = agentsInstructions
+  ? `${agentsInstructions}${workspaceInfo}\n\n---\n\n${config.systemPrompt}`
+  : `${workspaceInfo}\n\n${config.systemPrompt}`;
+
+console.log(`[Agent] Workspace: ${workspace.root}`);
+if (agentsInstructions) {
+  console.log(`[Agent] Loaded AGENTS.md (${agentsInstructions.length} chars)`);
+}
+
 const llm = new LLMClient({
   apiKey,
   model: config.model,
-  systemPrompt: config.systemPrompt,
+  systemPrompt: fullSystemPrompt,
+  workspace: config.workspace,
 });
 
 const gateway = new Gateway(
@@ -29,12 +53,8 @@ const gateway = new Gateway(
   config,
   async (sessionId: string, messages: Message[]) => {
     console.log(`[Gateway] Processing message for session: ${sessionId}`);
-    const response = await llm.chat(messages);
+    const response = await llm.chatWithTools(messages);
     return response;
-  },
-  async function* (sessionId: string, messages: Message[]) {
-    console.log(`[Gateway] Streaming response for session: ${sessionId}`);
-    yield* llm.chatStream(messages);
   },
 );
 
@@ -54,7 +74,7 @@ if (config.telegram?.enabled) {
       allowedChats: config.telegram.allowedChats,
     },
     async (sessionId: string, messages: Message[]) => {
-      const response = await llm.chat(messages);
+      const response = await llm.chatWithTools(messages);
       return response;
     },
   );
