@@ -1,4 +1,5 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 
 export interface Config {
@@ -10,10 +11,10 @@ export interface Config {
   };
   model: string;
   systemPrompt: string;
-  tui?: {
+  tui: {
     enabled: boolean;
   };
-  telegram?: {
+  telegram: {
     enabled: boolean;
     allowedChats: string[];
   };
@@ -31,31 +32,61 @@ const DEFAULT_CONFIG: Config = {
   tui: {
     enabled: true,
   },
+  telegram: {
+    enabled: true,
+    allowedChats: [],
+  },
 };
 
-export function loadConfig(configPath?: string): Config {
-  const defaultPath = path.resolve("config.json");
-  const filePath = configPath || defaultPath;
+function mergeConfig(userConfig: Partial<Config>): Config {
+  return {
+    ...DEFAULT_CONFIG,
+    ...userConfig,
+    gateway: {
+      ...DEFAULT_CONFIG.gateway,
+      ...(userConfig.gateway || {}),
+    },
+    tui: {
+      ...DEFAULT_CONFIG.tui,
+      ...(userConfig.tui || {}),
+    },
+    telegram: {
+      enabled: userConfig.telegram?.enabled ?? DEFAULT_CONFIG.telegram.enabled,
+      allowedChats:
+        userConfig.telegram?.allowedChats ??
+        DEFAULT_CONFIG.telegram.allowedChats,
+    },
+  };
+}
 
-  if (!fs.existsSync(filePath)) {
-    return DEFAULT_CONFIG;
+export function loadConfig(configPath?: string): Config {
+  if (configPath && fs.existsSync(configPath)) {
+    return loadConfigFile(configPath);
   }
 
+  const localPath = path.resolve("config.json");
+  if (fs.existsSync(localPath)) {
+    return loadConfigFile(localPath);
+  }
+
+  const userConfigPath = path.join(
+    os.homedir(),
+    ".config",
+    "felix",
+    "config.json",
+  );
+  if (fs.existsSync(userConfigPath)) {
+    return loadConfigFile(userConfigPath);
+  }
+
+  return DEFAULT_CONFIG;
+}
+
+function loadConfigFile(filePath: string): Config {
   try {
     const fileContent = fs.readFileSync(filePath, "utf-8");
     const userConfig = JSON.parse(fileContent);
-    return {
-      ...DEFAULT_CONFIG,
-      ...userConfig,
-      gateway: {
-        ...DEFAULT_CONFIG.gateway,
-        ...userConfig.gateway,
-      },
-      tui: {
-        ...DEFAULT_CONFIG.tui,
-        ...userConfig.tui,
-      },
-    };
+    return mergeConfig(userConfig);
   } catch (err) {
     console.error(`[Config] Failed to load config from ${filePath}:`, err);
     return DEFAULT_CONFIG;

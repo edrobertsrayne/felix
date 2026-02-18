@@ -1,15 +1,20 @@
 {
-  "name": "my-agent",
+  "name": "felix",
   "version": "1.0.0",
   "type": "module",
+  "bin": {
+    "felix": "./dist/cli.js"
+  },
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target node --external react-devtools-core",
+    "build": "bun build src/cli.ts --outdir dist --target node --external react-devtools-core",
+    "build:all": "bun build src/cli.ts --outdir dist --target node --external react-devtools-core && bun build src/gateway-service.ts --outdir dist --target node --external react-devtools-core && bun build src/index.ts --outdir dist --target node --external react-devtools-core",
     "start": "bun run src/index.ts"
   },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
     "@openrouter/sdk": "^0.8.0",
+    "commander": "^14.0.3",
     "dotenv": "^16.4.0",
     "ink": "^6.7.0",
     "marked": "^17.0.3",
@@ -27,6 +32,7 @@
     "bun-types": "^1.3.9",
     "eslint": "^10.0.0",
     "prettier": "^3.8.1",
+    "react-devtools-core": "^7.0.1",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.56.0"
   }

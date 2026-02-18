@@ -143,3 +143,49 @@ export class TelegramAdapter {
     }
   }
 }
+
+type MessageHandler = (
+  sessionId: string,
+  messages: Message[],
+) => Promise<string>;
+
+export interface TelegramConfig {
+  enabled: boolean;
+  allowedChats: string[];
+}
+
+export async function createTelegramAdapter(
+  config: TelegramConfig,
+  messageHandler: MessageHandler,
+): Promise<TelegramAdapter | null> {
+  if (config.enabled === false) {
+    console.log("[Telegram] Disabled in config");
+    return null;
+  }
+
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.warn(
+      "[Telegram] TELEGRAM_BOT_TOKEN not set, skipping Telegram adapter",
+    );
+    return null;
+  }
+
+  if (!config.allowedChats || config.allowedChats.length === 0) {
+    console.warn(
+      "[Telegram] No allowedChats configured, skipping Telegram adapter",
+    );
+    return null;
+  }
+
+  try {
+    const adapter = new TelegramAdapter(
+      { botToken: token, allowedChats: config.allowedChats },
+      messageHandler,
+    );
+    return adapter;
+  } catch (err) {
+    console.error("[Telegram] Failed to create adapter:", err);
+    return null;
+  }
+}
